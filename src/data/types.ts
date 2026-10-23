@@ -1,0 +1,354 @@
+/**
+ * The pipeline is described once, here, and everything else is derived from it:
+ * the React Flow graph, the detail panel, the concept mind-maps, and the
+ * animated query trace.
+ */
+import type { IconName } from '../components/Icon'
+
+export type { IconName }
+
+/**
+ * Which part of the system a stage belongs to. `platform` is the control
+ * plane — it does not sit on the query path at all, it governs the stages
+ * that do.
+ */
+export type Phase = 'offline' | 'online' | 'platform'
+
+/**
+ * How a stage behaves in the graph. This distinction is the whole point of the
+ * visualisation — a stage that always runs is not the same shape of thing as a
+ * stage where you pick one of five variants, or one you can switch off.
+ */
+export type StageKind =
+  /** Always runs, exactly once, in order. */
+  | 'sequential'
+  /** Always runs, but you choose one implementation from `variants`. */
+  | 'choice'
+  /** May be skipped entirely. Toggled by the user. */
+  | 'optional'
+  /** Optional *and* multiplies the query into several parallel branches. */
+  | 'fanout'
+  /** Where the two halves meet: written offline, read online. */
+  | 'store'
+  /** Start / end of a path. */
+  | 'terminal'
+
+export interface Variant {
+  id: string
+  label: string
+  /** One line, shown on the node when this variant is selected. */
+  tagline: string
+  detail: string | string[]
+  example?: Example
+  math?: MathBlock[]
+  figures?: Figure[]
+  code?: CodeBlock[]
+  tradeoffs?: Tradeoffs
+}
+
+export interface Example {
+  beforeLabel?: string
+  before: string
+  afterLabel?: string
+  after: string
+  /** Rendered in a monospace block rather than prose. */
+  mono?: boolean
+}
+
+/** A displayed equation, with the symbols spelled out underneath. */
+export interface MathBlock {
+  /** Short caption above the equation. */
+  title?: string
+  /** KaTeX source, rendered in display mode. */
+  tex: string
+  /** `symbol` → what it means. Rendered as a legend below the equation. */
+  where?: { sym: string; means: string }[]
+  /** A worked numeric substitution, rendered as a second equation. */
+  worked?: { tex: string; caption?: string }[]
+  /** Prose note under the whole block. */
+  note?: string
+}
+
+export interface Tradeoffs {
+  /** What this buys you. */
+  gains: string[]
+  /** What it costs. */
+  costs: string[]
+}
+
+/** A "these two are commonly conflated" callout. */
+export interface Distinction {
+  title: string
+  body: string
+}
+
+/** A tool commonly used at this stage. */
+export interface StackItem {
+  name: string
+  /** One line: what it is, and when you would reach for it. */
+  what: string
+  url?: string
+}
+
+/** A focused code snippet, usually LangChain / LangGraph. */
+export interface CodeBlock {
+  /** Framework label shown in the header, e.g. "LangChain". */
+  title?: string
+  /** Drives highlighting and the language tag. */
+  language: 'python' | 'bash' | 'text'
+  code: string
+  /** One line under the block explaining what it shows. */
+  note?: string
+}
+
+/**
+ * Small inline diagrams. Declared as data so the content files stay readable
+ * and every figure inherits the same monochrome styling.
+ */
+export type Figure =
+  /**
+   * Grouped bar chart. Each series renders as its own panel side by side,
+   * sharing a y-scale — which is what makes three temperature settings
+   * directly comparable.
+   */
+  | {
+      kind: 'bars'
+      title?: string
+      caption?: string
+      categories: string[]
+      series: { label: string; values: number[] }[]
+      /** Draw a cutoff rule after this many bars, e.g. a top-K boundary. */
+      cutoff?: { after: number; label: string }
+      /** Indices to draw filled rather than outlined. */
+      highlight?: number[]
+      yMax?: number
+      /** Print each bar's value above it. */
+      showValues?: boolean
+    }
+  /** Line plot. Used for saturation, discount and threshold curves. */
+  | {
+      kind: 'curve'
+      title?: string
+      caption?: string
+      xLabel: string
+      yLabel: string
+      lines: { label?: string; points: [number, number][]; dashed?: boolean }[]
+      marks?: { x: number; y: number; label: string }[]
+      xTicks?: { at: number; label: string }[]
+      yTicks?: { at: number; label: string }[]
+    }
+  /** Horizontal tracks split into spans — chunking strategies. */
+  | {
+      kind: 'segments'
+      title?: string
+      caption?: string
+      total: number
+      rows: {
+        label: string
+        spans: { from: number; to: number; label?: string; ghost?: boolean }[]
+      }[]
+    }
+  /** A ranked result strip with graded relevance shading. */
+  | {
+      kind: 'ranked'
+      title?: string
+      caption?: string
+      /** 0 = irrelevant. Higher shades darker. */
+      grades: number[]
+      maxGrade?: number
+      /** Marks the first relevant hit, for MRR. */
+      markFirstRelevant?: boolean
+    }
+  /** Rows of labelled boxes with optional arrows between them. */
+  | {
+      kind: 'blocks'
+      title?: string
+      caption?: string
+      rows: {
+        label?: string
+        /** `span` widens a box relative to its siblings. */
+        boxes: { text: string; span?: number; filled?: boolean; dashed?: boolean }[]
+        /** Arrow drawn below this row. */
+        arrow?: string
+      }[]
+    }
+  | {
+      kind: 'network'
+      title?: string
+      caption?: string
+      nodes: { id: string; x: number; y: number; isEntry?: boolean; isTarget?: boolean; label?: string }[]
+      links: { source: string; target: string }[]
+      /** Sequence of node ids representing the search path to animate. */
+      path?: string[]
+      /** Free-positioned text callouts drawn on the figure. */
+      annotations?: { x: number; y: number; text: string; anchor?: 'start' | 'middle' | 'end' }[]
+      /** Point-by-point walkthrough rendered as an ordered list under the figure. */
+      steps?: string[]
+    }
+  | {
+      kind: 'layered'
+      title?: string
+      caption?: string
+      layers: number[]
+      nodes: { id: string; x: number; y: number; maxLayer: number; isEntry?: boolean; isTarget?: boolean }[]
+      links: { source: string; target: string; layer: number }[]
+      /** Sequence of {node, layer} representing the search descent to animate. */
+      path?: { node: string; layer: number }[]
+      /** Short description drawn to the right of each layer plane. */
+      layerLabels?: { layer: number; text: string }[]
+      /** Free-positioned text callouts drawn on the figure. */
+      annotations?: { x: number; y: number; text: string; anchor?: 'start' | 'middle' | 'end' }[]
+      /** Point-by-point walkthrough rendered as an ordered list under the figure. */
+      steps?: string[]
+    }
+  /**
+   * Isometric 3D view of a multi-layer HNSW graph. `build` animates node
+   * insertion; `search` animates the greedy descent to a query. Node positions
+   * are (x, z) in [0,1] within each layer plane; per-layer edges and the search
+   * path are computed from the geometry.
+   */
+  | {
+      kind: 'hnsw3d'
+      mode: 'build' | 'search'
+      title?: string
+      caption?: string
+      steps?: string[]
+      layers: number[]
+      nodes: { id: string; x: number; z: number; maxLayer: number; isEntry?: boolean }[]
+      /** Query point (x, z) in [0,1], for `search` mode. */
+      query?: { x: number; z: number }
+    }
+  /**
+   * IVF partition: Voronoi cells around k-means centroids. Animates a query
+   * probing its nprobe nearest cells. Coordinates are (x, y) in [0,1]; cell
+   * membership and the searched set are computed from the geometry.
+   */
+  | {
+      kind: 'ivf'
+      title?: string
+      caption?: string
+      steps?: string[]
+      centroids: { x: number; y: number }[]
+      points: { x: number; y: number }[]
+      query: { x: number; y: number }
+      /** Cells searched at query time. */
+      nprobe: number
+    }
+
+/**
+ * A node in a stage's concept mind-map. Concepts nest arbitrarily deep; the
+ * map renders one ring per level and expands on click.
+ */
+export interface Concept {
+  id: string
+  label: string
+  /** Drives the node's colour and icon in the map. */
+  kind: 'idea' | 'formula' | 'method' | 'metric' | 'pitfall' | 'tradeoff'
+  /** One line, shown on the map node itself. */
+  summary: string
+  detail?: string[]
+  math?: MathBlock[]
+  figures?: Figure[]
+  code?: CodeBlock[]
+  example?: Example
+  tradeoffs?: Tradeoffs
+  children?: Concept[]
+  /** Tools and libraries commonly used for this concept. */
+  stack?: StackItem[]
+}
+
+/** One frame of the animated query walkthrough. */
+export interface TraceFrame {
+  /** Short label for what happened, e.g. "Pronoun resolved". */
+  headline: string
+  /** The payload as it exists *after* this stage runs. */
+  payload: string
+  /** Renders `payload` as preformatted text. */
+  mono?: boolean
+  /** Optional annotation shown under the payload. */
+  note?: string
+}
+
+export interface Stage {
+  id: string
+  label: string
+  phase: Phase
+  kind: StageKind
+  /** Name from the icon set — see components/Icon.tsx. */
+  icon: IconName
+  /** Section number from the reference outline, e.g. "1c". Purely for orientation. */
+  ordinal?: string
+  /** One short line, always visible on the node. */
+  tagline: string
+  /** Panel body. Each string is a paragraph. */
+  detail: string[]
+  example?: Example
+  math?: MathBlock[]
+  figures?: Figure[]
+  tradeoffs?: Tradeoffs
+  distinctions?: Distinction[]
+  /** For `choice` stages. */
+  variants?: Variant[]
+  /** For `fanout` stages: what the query is multiplied into. */
+  fanoutInto?: string[]
+  /**
+   * Stage *ids* this one governs. Rendered as clickable chips that jump to the
+   * target stage. Control-plane stages relate to half the pipeline at once, and
+   * drawing an edge for each would turn the canvas into spaghetti — so these
+   * chips carry the relationship, and act as the navigation those edges would
+   * have provided.
+   */
+  governs?: string[]
+  /** Root concepts for this stage's mind-map. */
+  concepts?: Concept[]
+  /** Tools and libraries commonly used at this stage. */
+  stack?: StackItem[]
+  /** Code snippets, usually LangChain / LangGraph. */
+  code?: CodeBlock[]
+  /** Frame shown when the animated query passes through this stage. */
+  trace?: TraceFrame
+}
+
+/** Everything the user can switch on, off, or swap. */
+export interface PipelineConfig {
+  chunking: string
+  /** Which vectors get compared — Flat, IVF, or HNSW. */
+  indexStructure: string
+  /** How each vector is stored — none, scalar, product, or binary quantisation. */
+  compression: string
+  retrieval: string
+  decoding: string
+  multiQuery: boolean
+  decomposition: boolean
+  hyde: boolean
+  /** Answer/retrieval cache checked before the retriever runs. */
+  semanticCache: boolean
+  dedup: boolean
+  rerank: boolean
+  /** Token-budget fitting between ranking and prompt assembly. */
+  contextWindow: boolean
+  contextualCompression: boolean
+  retrievalMetrics: boolean
+  evaluation: boolean
+  /** Show the control-plane lane: triggers, policy, versioning, CI, fallback. */
+  platform: boolean
+}
+
+export const defaultConfig: PipelineConfig = {
+  chunking: 'recursive',
+  indexStructure: 'hnsw',
+  compression: 'none',
+  retrieval: 'hybrid',
+  decoding: 'greedy',
+  multiQuery: false,
+  decomposition: false,
+  hyde: false,
+  semanticCache: true,
+  dedup: true,
+  rerank: true,
+  contextWindow: true,
+  contextualCompression: false,
+  retrievalMetrics: true,
+  evaluation: true,
+  platform: true,
+}
